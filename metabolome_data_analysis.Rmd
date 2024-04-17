@@ -1,0 +1,189 @@
+---
+title: "metobolom"
+output: html_document
+date: '2022-11-20'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Metabolome Data Analysis
+```{r}
+library(readxl)
+library(tidyverse)
+library(SuperExactTest)
+setwd("C:\\path")
+getwd()
+```
+
+
+Metabolome data is available for some of the individuals in the ROSMAP cohort, collected using the untargeted metabolomics platform from Metabolon Inc (Metabolon HD4, syn25985690). Metabolites with >30 % missing values were excluded.  For each remaining metabolite, the missing values were imputed as half of the minimum measured value of that metabolite. 
+
+```{r}
+data<- read_excel("data.xlsx")
+datat<- as.data.frame(t(data))
+data_clear<- datat[-c(1:5),]
+colnames(data_clear)<- datat[2,]
+data_clear<- as.data.frame(sapply(data_clear, function(x) as.numeric(x)))
+met<- rownames(datat)[6:691]
+rownames(data_clear)<- met
+my_sample<- colnames(data_clear)
+data_clear$minimum <-apply(data_clear, 1, function(x) min(x, na.rm = TRUE)/2)
+data_pro<- data_clear
+for(i in 1:nrow(data_pro)){
+  na_rows <- grepl('NA',data_pro[i,])
+  data_pro[i,na_rows] <- data_pro$minimum[i]
+}
+```
+
+The data was adjusted for the gender, age of death, and post-mortem interval of the samples using the lm function in R.
+```{r}
+metadatarosmap <- read_excel("metadatarosmap.xlsx")
+filtered_meta<- metadatarosmap[metadatarosmap$projid %in% my_sample, ]
+data_pro<- data_pro[,1:240]
+data_clear<- data_pro
+
+data_d<- as.data.frame(t(data_clear)) 
+
+condition.num = filtered_meta$condition
+sex.num = filtered_meta$msex
+age= as.data.frame(filtered_meta$age_death)
+age[age=="90+"] = "91"
+age=as.numeric(age$`filtered_meta$age_death`)
+pmi= as.numeric(filtered_meta$pmi)
+
+fit3 = lm(as.matrix(data_d)~ sex.num + age + condition.num + pmi) 
+
+coef=fit3[["coefficients"]]
+
+colnames(coef)
+data_d2= t(data_d)
+
+fitteddata=matrix(0, 686,240)
+cins=sex.num
+cins[cins=="female"]=0
+cins[cins=="male"]=1
+cins= as.numeric(cins)
+state=condition.num
+state[state=="AD"]=0
+state[state=="control"]=1
+state=as.numeric(state)
+names=NULL
+for (j in 1:240){
+   
+   for (i in 1:686) {
+      genename= colnames(coef)[i]
+      con= state[j]
+      gender= cins[j]
+      deathage= age[j]
+      pmitime=pmi[j]
+      count= data_d2[i,j]-gender*coef[2,i]-deathage*coef[3,i]-pmitime*coef[5,i]
+      names[i]= genename
+      fitteddata[i,j]= count
+   }
+}
+colnames(fitteddata)= colnames(data_d2)
+rownames(fitteddata)=names
+write.csv(fitteddata,"covariat_Adjust_metabolon_mindivided2.csv")
+save(fitteddata,file="results.RData")
+```
+
+Read data
+```{r}
+info <- read_excel("file_name.xlsx")
+metabolon<- read.csv("covariat_Adjust_metabolon_mindivided2.csv",header = TRUE, sep=";")
+```
+
+
+Grouping samples similar to transcriptome data analysis
+```{r}
+#For clinical categorization
+control_cogdx <- info %>% filter (cogdx==1 | cogdx==2| cogdx==3) %>% filter(.$Sample_id %in% colnames(metabolon))
+control_cogdx_exp<- metabolon %>% select (control_cogdx$Sample_id)
+rownames(control_cogdx_exp)<- metabolon$X
+
+AD_cogdx <- info %>% filter (cogdx==4 | cogdx==5) %>% filter(.$Sample_id %in% colnames(metabolon)) 
+AD_cogdx_exp<- metabolon %>% select (AD_cogdx$Sample_id)
+rownames(AD_cogdx_exp)<- metabolon$X
+
+data_cogdx<- cbind(control_cogdx_exp,AD_cogdx_exp)
+rownames(data_cogdx)<-metabolon$chemical
+
+#For pathological categorization
+control_cerad <- info %>% filter (CERAD==3 | CERAD==4) %>% filter(.$Sample_id %in% colnames(metabolon))
+control_cerad_exp<- metabolon %>% select (control_cerad$Sample_id)
+rownames(control_cerad_exp)<- metabolon$X
+
+AD_cerad <- info %>% filter (CERAD==1 | CERAD==2) %>% filter(.$Sample_id %in% colnames(metabolon))
+AD_cerad_exp<- metabolon %>% select (AD_cerad$Sample_id)
+rownames(AD_cerad_exp)<- metabolon$X
+
+data_cerad<- cbind(control_cerad_exp,AD_cerad_exp)
+rownames(data_cerad)<-metabolon$chemical
+
+#For consensus categorization
+control_common <- info %>% filter (CERAD==3 | CERAD==4) %>% filter (cogdx==1 | cogdx==2| cogdx==3)  %>% filter(.$Sample_id %in% colnames(metabolon))
+control_common_exp<- metabolon %>% select (control_common$Sample_id)
+
+AD_common<- info %>% filter (CERAD==1 | CERAD==2) %>% filter (cogdx==4 | cogdx==5)%>%  filter(.$Sample_id %in% colnames(metabolon)) 
+AD_common_exp<- metabolon %>% select (AD_common$Sample_id)
+
+consensus<- cbind(control_common_exp,AD_common_exp)
+rownames(consensus) <- metabolon$chemical
+
+#For AsymAD group
+AD41<- info %>% filter (cogdx==1)%>% filter (CERAD==1 | CERAD==2)%>% filter(.$Sample_id %in% colnames(metabolon))
+AD41_exp<- metabolon %>% select (AD41$Sample_id)
+rownames(AD41_exp)<- metabolon$chemical
+
+# For AsymAD-adjusted clinical categorization
+control_cogdx_adj<- select(control_cogdx_exp,-AD41$Sample_id)
+AD_cogdx_adj<- cbind(AD41_exp,AD_cogdx_exp)
+data_adjusted1<-cbind(control_cogdx_adj,AD_cogdx_adj)
+rownames(data_adjusted1)<- metabolon$chemical
+
+# For AsymAD-adjusted pathological categorization
+control_cerad_adj<- cbind(control_cerad_exp,AD41_exp)
+AD_cerad_adj<- select(AD_cerad_exp,-AD41$Sample_id)
+data_adjusted2<-cbind(control_cerad_adj,AD_cerad_adj)
+rownames(data_adjusted2)<- metabolon$chemical
+```
+
+Classical t-test was used.
+```{r}
+# It is an example for cogdx based categorization.
+pval <- vector()
+for (i in 1:nrow(data_cogdx)) {  
+  pval[i] = t.test(as.numeric(data_cogdx[i,1:134]), as.numeric(data_cogdx[i,135:234]))$p.value
+}
+pval<- as.data.frame(pval)
+pval_res<-cbind(metabolon$chemical,pval)
+
+write.csv(pval_res,"metabolon_pval_cogdx_noscore6_ttest.csv")
+```
+
+super exact test
+https://cran.r-project.org/web/packages/SuperExactTest/vignettes/set_html.html
+https://cran.r-project.org/web/packages/SuperExactTest/SuperExactTest.pdf
+```{r}
+data<- read_excel("super_exact_data.xlsx")
+p=cpsets(8,c(83,48,60),686,lower.tail=FALSE)
+print(p) # 7.874683e-10
+
+x=list(pat=data$metabolit[1:83], cli=data$metabolit[84:131], cons=data$metabolit[132:191])
+
+fit=MSET(x, 686, FALSE)
+fit$p.value  #2.062149e-08
+
+x_pc=list(pat=data$metabolit[1:83], cons=data$metabolit[132:191]) #compare pathologic vs consensus p= 3.2x10-20
+
+x_cc=list(cli=data$metabolit[84:131], cons=data$metabolit[132:191])#compare clinic vs consensus, p=3.9x10-14
+
+x_patcli=list(pat=data$metabolit[1:83], cli=data$metabolit[84:131])#compare clinic vs pathologci, p=0.12
+
+fit=MSET(x_patcon, 686, FALSE)
+
+Result=supertest(x, n=686)
+plot(Result,sort.by='size')
+```

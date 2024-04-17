@@ -1,0 +1,104 @@
+---
+title: "AD-nonAD-AsymAD Grouping and Comparison of Diagnosis Strategies for AD"
+output: html_document
+date: '2022-12-21'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Call related packages from library
+```{r}
+library(readxl)
+library(tidyverse)
+library(limma)
+
+setwd("C:\\path of file")
+getwd()
+```
+
+Normalized and covariate adjusted RNA sequencing data from the ROSMAP study by Neff et al. (Neff et al., 2021) for DLPFC brain region was downloaded from the Synapse database (dataset ID of syn25944586). 
+```{r}
+table_exp<-read_excel("data.xlsx")
+rownames(table_exp)<-table_exp$EnsemblID
+
+data<- table_exp[,3:616]
+rownames(data)<- table_exp$EnsemblID
+
+# This file includes metadata of ROSMAP downloaded from Synapse. https://www.synapse.org/#!Synapse:syn3157322
+info <- read_excel("file_name.xlsx")
+```
+
+Individuals were grouped based on clinical score (cogdx=4|5 for AD group, cogdx=1|2|3 for non-AD group)
+```{r}
+control_cogdx <- info %>% filter (cogdx==1 | cogdx==2| cogdx==3) 
+control_cogdx_exp<- data %>% select (control_cogdx$Sample_id)
+rownames(control_cogdx_exp)<- table_exp$EnsemblID
+
+AD_cogdx<- info %>% filter (cogdx==4 | cogdx==5)  # | cogdx==6 was not included because of other dementia
+AD_cogdx_exp<- data %>% select (AD_cogdx$Sample_id)
+rownames(AD_cogdx_exp)<- table_exp$EnsemblID
+
+data_cog<- cbind(control_cogdx_exp,AD_cogdx_exp)
+rownames(data_cog)<- table_exp$EnsemblID
+```
+
+Individuals were grouped based on neuropathological score (CERAD=1|2 for AD group, cogdx=3|4 for non-AD group)
+```{r}
+score6<- c("Proj10292311", "Proj11455530", "Proj15495024", "Proj20179164" ,"Proj93815598", "Proj50300408", "Proj10405008", "Proj50108598", "Proj68015667","Proj20201189","Proj37527863")
+
+control_cerad <- info %>% filter (CERAD==3 | CERAD==4) %>% filter(!Sample_id %in% score6) # These samples were removed because of other dementia.
+control_cerad_exp<- data %>% select (control_cerad$Sample_id)
+rownames(control_cerad_exp)<- table_exp$EnsemblID
+
+AD_cerad<- info %>% filter (CERAD==1 | CERAD==2) %>% filter(!Sample_id %in% score6)
+AD_cerad_exp<- data %>% select (AD_cerad$Sample_id)
+rownames(AD_cerad_exp)<- table_exp$EnsemblID
+
+data_cer<- cbind(control_cerad_exp,AD_cerad_exp)
+rownames(data_cer)<- table_exp$EnsemblID
+```
+
+
+Consensus non-AD and consensus AD between cogdx and CERAD.
+Determining AsymAD group.
+```{r}
+control_common <- info %>% filter (CERAD==3 | CERAD==4) %>% filter (cogdx==1 | cogdx==2| cogdx==3)%>%filter(!Sample_id %in% score6)
+
+control_common_exp<- table_exp %>% select (control_common$Sample_id)
+rownames(control_common_exp)<- rownames(table_exp)
+
+AD_common<- info %>% filter (CERAD==1 | CERAD==2) %>% filter (cogdx==4 | cogdx==5) 
+AD_common_exp<- table_exp %>% select (AD_common$Sample_id)
+rownames(AD_common_exp)<- rownames(table_exp)
+
+
+# AsymAD group includes 91 individuals.
+AD91<- info %>% filter (cogdx==1)%>% filter (CERAD==1 | CERAD==2)
+AD91_exp<- table_exp %>% select (AD91$Sample_id)
+rownames(AD91_exp)<- rownames(table_exp)
+```
+
+DEGs were listed with limma package.
+non-AD vs AD based on cogdx
+non-AD vs AD based on CERAD
+non-AD vs AD based on consensus categorization
+two additional categorization strategies
+For five differetn categorization strategies DEGs were determined and recorded.
+```{r}
+
+#This is an example for determination of DEGs for cogdx based categorization
+
+designMat <- c(rep('control', 359), rep('AD', 243)) # 
+design<-model.matrix(~0 + factor(designMat))
+colnames(design)<-c('control','AD')
+contrast <- makeContrasts(AD - control, levels = design)
+fit <- lmFit(data_cog, design)
+ fit2 <- contrasts.fit(fit, contrast)
+  fit2 <- eBayes(fit2)
+  degDF1 <- as.data.frame(topTable(fit2, n = 'Inf'))
+
+write.csv(degDF1,"DEGs_cogdx.csv")
+```
+

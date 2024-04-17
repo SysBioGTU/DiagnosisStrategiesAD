@@ -1,0 +1,55 @@
+---
+title: "Before Fisher Exact Test"
+output: html_document
+date: "2024-04-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Call related packages from library
+```{r}
+library(readxl)
+library(tidyverse)s
+setwd("C:\\path of file")
+getwd()
+```
+
+Binary models were separated based on non-AD and AD groups for two diagnosis strategies. Similar to "AD-nonAD-AsymADgrouping_DEGs.Rmd" codes, binary versions of personalized models were grouped before the Fisher Exact Test. 
+
+Normalized and covariate adjusted RNA sequencing data from the ROSMAP study by Neff et al. (Neff et al., 2021) for DLPFC brain region was downloaded from the Synapse database (dataset ID of syn25944586)
+```{r}
+table_binary <- read_excel("data.xlsx")
+
+# This file includes metadata of ROSMAP downloaded from Synapse. https://www.synapse.org/#!Synapse:syn3157322
+info <- read_excel("file_name.xlsx")
+```
+
+Based on 91 AsymAD individuals, groupings were checked.
+```{r}
+AD_91_binary<- as.data.frame(select(table_binary,AD91$Sample_id))
+write.csv(AD_91_binary,"binary_nonAD_AD91_common.csv")
+
+control_cerad_binary<- as.data.frame(select(table_binary,control_cerad$Sample_id))
+control_cerad_adj_binary<- cbind(control_cerad_binary,AD_91_binary)
+write.csv(control_cerad_adj_binary,"aa_binary_nonAD_control_cerad_adj.csv")
+
+AD_cerad_binary<- as.data.frame(select(table_binary,AD_cerad$Sample_id))
+AD_cerad_adj_binary<- select(AD_cerad_binary,-AD91$Sample_id)
+write.csv(AD_cerad_adj_binary,"aa_binary_nonAD_AD_cerad_adj.csv")
+
+control_cogdx_binary<- as.data.frame(select(table_binary,control_cogdx$Sample_id))
+control_cogdx_adj_binary<- select(control_cogdx_binary,-AD91$Sample_id)
+write.csv(control_cogdx_adj_binary,"aa_binary_nonAD_control_cogdx_adj.csv")
+
+AD_cogdx_binary<- as.data.frame(select(table_binary,AD_cogdx$Sample_id))
+AD_cogdx_adj_binary<- cbind(AD_cogdx_binary,AD_91_binary)
+write.csv(AD_cogdx_adj_binary,"aa_binary_nonAD_AD_cogdx_adj.csv") 
+
+control_common_binary<- as.data.frame(select(table_binary,control_common$Sample_id))
+write.csv(control_common_binary,"binary_nonAD_control_common_.csv")
+
+AD_common_binary<- as.data.frame(select(table_binary,AD_common$Sample_id))
+write.csv(AD_common_binary,"binary_nonAD_AD_common.csv")
+```
